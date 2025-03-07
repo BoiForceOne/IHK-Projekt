@@ -1,0 +1,11 @@
+./*.png
+__pycache__/
+*.pyc
+tempCodeRunnerFile.py
+scannedIDs.json
+*.xlsx
+settings.json
+build
+out
+dist
+*.spec

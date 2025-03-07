@@ -1,0 +1,31 @@
+{
+    "locations": {
+        "Area.01": {
+            "id": "f7428ce1-7916-4771-bad9-9d9efa5e27da",
+            "S1": {
+                "id": "3bcf7e40-c5e5-4a15-8ef2-77a750bb084e",
+                "Schublade 1": {
+                    "id": "d32c8f6c-9c58-40d6-97b7-94659dc9f921"
+                }
+            }
+        },
+        "Keller": {
+            "id": "543e0cbe-d19c-4760-bbe6-2d1438f023ae",
+            "Lasercutterregal": {
+                "id": "22775ee1-dc5f-4bef-811c-ae87ceb9ea3c",
+                "Spanplatte": {
+                    "id": "1dd53957-e885-4e23-98a1-7dadba00279b"
+                },
+                "Walnuss": {
+                    "id": "eb8c9c02-bf6d-459f-9a53-cc1f31151a46"
+                }
+            },
+            "Regal 1": {
+                "id": "6351eeee-81eb-44d4-9132-b739adbba2bb",
+                "Schublade 2": {
+                    "id": "61847694-85ec-4457-b1d3-350d60655136"
+                }
+            }
+        }
+    }
+}
