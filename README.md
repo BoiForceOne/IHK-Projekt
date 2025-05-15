@@ -14,10 +14,8 @@ Ein Projekt, um das Nachbestellen von elektronischen Bauteilen in der Area.01 zu
     - [ ] Daten in SQLite speichern
 
 ## Planned
-- v0.2.0 SQLite & Propper Syncing
+- v0.2.0 SQLite
     - Daten in SQLite speichern
-    - Locale Copie der DB zum bearbeiten
-    - Zuverlässige Synchronisation der DB zurück zum "Remote"
 - v0.3.0 verschiedene Views über Browser artige Sidebar (Scanner, Suche?, Übersicht, Settings)
 
 ## Funktionen
@@ -34,6 +32,7 @@ Ein Projekt, um das Nachbestellen von elektronischen Bauteilen in der Area.01 zu
 - Mehrere Lagerorte pro Eintrag aus selbstdefinierter Liste (TODO)
 - Einträge können erstellt, bearbeitet und gelöscht werden
 - Handbuch mit Anleitung zur Nutzung
+- Mehrere Personen können an einer Datenbank/Excel arbeiten. Schreibt nur reihenweise, Synchronisierung über z.B. OneDrive
 
 ## Herunterladen
 Gehe zur release-Seite und lade die aktuelle Version herunter.

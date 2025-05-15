@@ -1,4 +1,3 @@
-from functools import cmp_to_key
 from typing import Callable, Literal, Sequence
 from PySide6.QtWidgets import (
     QTreeView,
@@ -22,15 +21,16 @@ from PySide6.QtCore import (
     QMimeData,
     QPersistentModelIndex,
 )
-from location import getLocation, isDuplicateNameWithinParent, keepTopParents, newLocation
+from location import getChildren, getLocation, isDuplicateNameWithinParent, keepTopParents, newLocation, sortLocations
 from state import *
+import db
 
 
 class CustomTreeModel(QStandardItemModel):
-    def __init__(self, settings: Settings, onUpdate: Callable[[], None]):
+    def __init__(self, state: State, onUpdate: Callable[[], None]):
         super().__init__()
         self.onUpdate = onUpdate
-        self.settings = settings
+        self.state = state
 
     def supportedDropActions(self):
         return Qt.DropAction.MoveAction
@@ -65,19 +65,19 @@ class CustomTreeModel(QStandardItemModel):
             return False
 
         if parent.isValid():
-            parentLocation = getLocationFromQIndex(self.settings.locations, self, parent)
+            parentLocation = getLocationFromQIndex(self.state.data.locations, self, parent)
         else:
             parentLocation = None
         encodedData = data.data("application/x-qstandarditemmodeldatalist")
         stream = QDataStream(encodedData, QIODevice.OpenModeFlag.ReadOnly)
-        locationsToMove: list[Location] = []
+        locationIdsToMove: list[str] = []
 
         while not stream.atEnd():
             id: str = stream.readQString()
-            location = getLocation(self.settings.locations, id)
-            locationsToMove.append(location)
+            location = getLocation(self.state.data.locations, id)
+            locationIdsToMove.append(location.id)
             if location.parent is not parentLocation and isDuplicateNameWithinParent(
-                self.settings.locations, location.name, parentLocation
+                self.state.data.locations, location.name, parentLocation
             ):
                 QMessageBox.warning(
                     mainWindow(),
@@ -86,20 +86,18 @@ class CustomTreeModel(QStandardItemModel):
                 )
                 return False
 
-        locationsToMove = keepTopParents(locationsToMove)
+
+        # Reloading from File refreshes all references. 
+        # After that line references to location object are invalide
+        # They need to be retrieved by their ids
+        db.reloadFromFile(self.state.data, self.state.settings.filePath)
+        locationsToMove = [getLocation(self.state.data.locations, id) for id in locationIdsToMove]
+        locationsToMove = keepTopParents(self.state.data.locations, locationsToMove)
         for location in locationsToMove:
-            oldParent = location.parent
-            location.parent = parentLocation
-            if parentLocation is not None:
-                parentLocation.children.append(location)
-            else:
-                self.settings.locations.append(location)
-
-            if oldParent is not None:
-                oldParent.children.remove(location)
-            else:
-                self.settings.locations.remove(location)
-
+            location.parent = None if parentLocation is None else parentLocation.id
+        db.saveToExel(self.state.data, self.state.settings.filePath)
+        if parentLocation:
+            getLocation(self.state.data.locations, parentLocation.id).expanded = True
         self.onUpdate()
         return True
 
@@ -123,44 +121,30 @@ def getLocationFromQIndex(locations: list[Location], model: QStandardItemModel, 
 def createLocationTree(
     parentItem: QStandardItem | QStandardItemModel,
     locations: list[Location],
+    parent: Location | None = None
 ):
     """Recursive function to add sub-locations to the tree view."""
-    for location in locations:
+    for location in getChildren(locations, parent):
         locationItem = QStandardItem(location.name)
         locationItem.setEditable(False)
         # Store the location id as hidden data
         locationItem.setData(location.id, Qt.ItemDataRole.UserRole)
         parentItem.appendRow(locationItem)
-        createLocationTree(locationItem, location.children)
+        createLocationTree(locationItem, locations, location)
 
 
-# --- Sort Locations ---
-
-
-def sortLocations(locations: list[Location]) -> list[Location]:
-    """Sorts the locations by their name."""
-
-    def sortComparator(x1: Location, x2: Location):
-        return (x1.name.lower() > x2.name.lower()) - (x1.name.lower() < x2.name.lower())
-
-    for section in locations:
-        sortLocations(section.children)
-        section.children = sorted(section.children, key=cmp_to_key(sortComparator))
-    return sorted(locations, key=cmp_to_key(sortComparator))
-
-
-def updateTreeView(settings: Settings, treeView: QTreeView, expandLock: Lock):
+def updateTreeView(locations: list[Location], treeView: QTreeView, expandLock: Lock):
     """Function to update the tree view with storage locations."""
-    settings.locations = sortLocations(settings.locations)
+    locations = sortLocations(locations)
 
     treeModel = treeView.model()
     assert isinstance(treeModel, QStandardItemModel)
     treeModel.removeRows(0, treeModel.rowCount())  # Clear model
 
     # Add storage locations as a hierarchical structure (nested)
-    createLocationTree(treeModel, settings.locations)
+    createLocationTree(treeModel, locations)
     with expandLock:
-        restoreExpandedState(settings.locations, treeView, treeModel)
+        restoreExpandedState(locations, treeView, treeModel)
 
 
 def captureExpandedState(
@@ -203,17 +187,17 @@ def setMultiSelectionMode(treeView: QTreeView, enabled: bool):
 
 
 def createLocationPicker(
-    settings: Settings, onPicked: Callable[[Location | None], None]
+    state: State, onPicked: Callable[[Location | None], None]
 ) -> QWidget:
-    return createTreeView(settings, "picker", onPicked)
+    return createTreeView(state, "picker", onPicked)
 
 
-def createLocationEditor(settings: Settings) -> QWidget:
-    return createTreeView(settings, "editor")
+def createLocationEditor(state: State) -> QWidget:
+    return createTreeView(state, "editor")
 
 
 def createTreeView(
-    settings: Settings,
+    state: State,
     mode: Literal["editor", "picker"],
     onPicked: Callable[[Location | None], None] | None = None,
 ) -> QWidget:
@@ -222,7 +206,7 @@ def createTreeView(
     locationWidget.setLayout(locationLayout)
 
     treeView = QTreeView()
-    treeModel = CustomTreeModel(settings, lambda: updateTreeView(settings, treeView, expandLock))
+    treeModel = CustomTreeModel(state, lambda: updateTreeView(state.data.locations, treeView, expandLock))
     treeView.setModel(treeModel)
     # Header for Tree View
     treeView.setAnimated(True)
@@ -258,7 +242,7 @@ def createTreeView(
         buttonLayout.addWidget(multiSelectCheckbox)
 
         def onAddNewLocation():
-            location = getCurrentSelectedLocation(settings.locations, treeView)
+            location = getCurrentSelectedLocation(state.data.locations, treeView)
             newName, ok = QInputDialog.getText(
                 locationWidget,
                 "Ort hinzufürgen",
@@ -266,34 +250,31 @@ def createTreeView(
             )
             if not ok or newName == "":
                 return
-            if isDuplicateNameWithinParent(settings.locations, newName, location):
+            if isDuplicateNameWithinParent(state.data.locations, newName, location):
                 QMessageBox.warning(
                     locationWidget, "Fehler", "Der gleicher Name exisitiert bereits"
                 )
                 return
             if location is None:
-                settings.locations.append(newLocation(newName, None))
+                db.addLocation(state, newLocation(newName, None))
             else:
-                location.children.append(newLocation(newName, location))
-            updateTreeView(settings, treeView, expandLock)
+                db.addLocation(state, newLocation(newName, location.id))
+            updateTreeView(state.data.locations, treeView, expandLock)
 
         addButton.clicked.connect(onAddNewLocation)
 
         def onDeleteLocation():
-            location = getCurrentSelectedLocation(settings.locations, treeView)
+            location = getCurrentSelectedLocation(state.data.locations, treeView)
             if location is None:
                 return
-            parent = location.parent
-            if parent is None:
-                return
-            parent.children.remove(location)
-            updateTreeView(settings, treeView, expandLock)
+            db.removeLocation(state, location)
+            updateTreeView(state.data.locations, treeView, expandLock)
 
         deleteButton.clicked.connect(onDeleteLocation)
 
         def onRenameLocation():
-            locations = settings.locations
-            location = getCurrentSelectedLocation(settings.locations, treeView)
+            locations = state.data.locations
+            location = getCurrentSelectedLocation(state.data.locations, treeView)
             if location is None:
                 return
             newName, ok = QInputDialog.getText(
@@ -309,8 +290,8 @@ def createTreeView(
                     locationWidget, "Error", "Name already exists on this level"
                 )
                 return
-            location.name = newName
-            updateTreeView(settings, treeView, expandLock)
+            db.renameLocation(state, location, newName)
+            updateTreeView(state.data.locations, treeView, expandLock)
 
         renameButton.clicked.connect(onRenameLocation)
 
@@ -326,7 +307,7 @@ def createTreeView(
         buttonLayout.addWidget(selectButton)
 
         def onSelect():
-            selection = getCurrentSelectedLocation(settings.locations, treeView)
+            selection = getCurrentSelectedLocation(state.data.locations, treeView)
             if selection:
                 onPicked(selection)
 
@@ -345,10 +326,10 @@ def createTreeView(
 
     # --- Update Tree View with Nested Structure ---
 
-    updateTreeView(settings, treeView, expandLock)
+    updateTreeView(state.data.locations, treeView, expandLock)
 
-    treeView.expanded.connect(lambda: captureExpandedState(settings.locations, treeView, treeModel, expandLock))
-    treeView.collapsed.connect(lambda: captureExpandedState(settings.locations, treeView, treeModel, expandLock))
+    treeView.expanded.connect(lambda: captureExpandedState(state.data.locations, treeView, treeModel, expandLock))
+    treeView.collapsed.connect(lambda: captureExpandedState(state.data.locations, treeView, treeModel, expandLock))
 
     treeView.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     return locationWidget

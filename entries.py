@@ -44,9 +44,8 @@ def entryWindow(state: State, row: db.Row):
                 continue
             value = getFieldValue(fields[column])
             row.setValue(column, value)
-        row.write(state.data)
+        row.write(state.data, state.settings.filePath)
         window.close()
-        db.saveToExel(state.data, state.settings.filePath)
 
     def deleteEntry(row: db.Row):
         """
@@ -60,9 +59,8 @@ def entryWindow(state: State, row: db.Row):
             QMessageBox.StandardButton.No,
         )
         if confirmation == QMessageBox.StandardButton.Yes:
-            row.delete(state.data)
+            row.delete(state.data, state.settings.filePath)
             window.close()
-            db.saveToExel(state.data, state.settings.filePath)
         else:
             pass
 
@@ -74,10 +72,10 @@ def entryWindow(state: State, row: db.Row):
                 row.setValue(LOCATION_COLUMN, location.id)
             field = fields[LOCATION_COLUMN]
             assert isinstance(field, QLineEdit)
-            field.setText(getLocationString(state.settings.locations, row.getValue(LOCATION_COLUMN)))
+            field.setText(getLocationString(state.data.locations, row.getValue(LOCATION_COLUMN)))
             locationWidget.close()
 
-        locationWidget = createLocationPicker(state.settings, onLocationPicked)
+        locationWidget = createLocationPicker(state, onLocationPicked)
         locationWidget.setWindowTitle("Lagerort auswählen")
         locationWidget.show()
 
@@ -152,7 +150,7 @@ def entryWindow(state: State, row: db.Row):
             
         if type(field) == QLineEdit:
             if column == LOCATION_COLUMN:
-                field.setText(getLocationString(state.settings.locations, value))
+                field.setText(getLocationString(state.data.locations, value))
                 continue
             field.setText(value)
             field.setEnabled(True)

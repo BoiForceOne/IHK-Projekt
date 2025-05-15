@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Self
 from PySide6.QtWidgets import (
     QApplication,
     QLineEdit,
@@ -112,8 +111,7 @@ class GUI:
 class Location:
     name: str
     id: str
-    children: list[Self]
-    parent: Self | None
+    parent: str | None
     expanded: bool = False
 
 
@@ -132,41 +130,26 @@ class Settings:
     language : The display language (Example)
     unitSystem : Which Unit System ("Metrisch" doer "Imperial") to use (Test)
     persistScannedIDs : Whether to persist the scanned IDs over sessions
-    storageLocationsDict : Contains the layout of all the Locations as the dict read from the config file
-        This is used in the settings window to display edit the locations
-        Updates storageLocations when saving the settings or reading the config file
-        For now this is the source of truth, but it should be replaced by storageLocations
-    storageLocations : Contains the layout of all the Locations
-        Example:
-        ```
-        {
-            "Area.01": {
-                "Regal 1": {
-                    "Schublade 1": {
-                        "id": "d32c8f6c-9c58-40d6-97b7-94659dc9f921"
-                    },
-                    "id": "3bcf7e40-c5e5-4a15-8ef2-77a750bb084e"
-                },
-                "id": "f7428ce1-7916-4771-bad9-9d9efa5e27da"
-            },
-            "Keller": {
-                "Lasercutterregal": {
-                    "id": "22775ee1-dc5f-4bef-811c-ae87ceb9ea3c"
-                },
-                "Regal 1": {
-                    "id": "6351eeee-81eb-44d4-9132-b739adbba2bb"
-                },
-                "id": "543e0cbe-d19c-4760-bbe6-2d1438f023ae"
-            }
-        }
-        ```
 
     """
+
     filePath: str
     language: str
     unitSystem: str
     persistScannedIDs: bool
-    locations: list[Location]
+
+
+@dataclass
+class DBInfo:
+    """
+    Infos about the database
+
+    Parameters
+    ----------
+    version : The olderst version of the Programm that this DB is compatible with / The version of the Programm that last broke compatability.
+    """
+
+    version: str
 
 
 @dataclass
@@ -185,8 +168,9 @@ class Data:
     scannedIDs : The IDs of the scanned entries.
     anzahlScannedItems : The amount scanned for each entries.
         Use ``db.syncIdsWithCount()`` to make sure that this matches the scannedIDs list.
-    _df : The dataframe that holds the data from the excel file.
+    df : The dataframe that holds the data from the excel file.
         Should not be used directly, instead use the ``db`` Module to get data.
+    locations : A list of all Locations
     """
 
     tableHeaders: list[str]
@@ -194,6 +178,8 @@ class Data:
     scannedIDs: list[int]
     anzahlScannedItems: dict[int, int]
     df: pd.DataFrame
+    locations: list[Location]
+    info: DBInfo
 
     def addId(self, id: int):
         if id not in self.scannedIDs:
@@ -225,6 +211,7 @@ class State:
     This Struct is created in the main function and passed by parameter to all other functions.
 
     Modifing the struct and it contents will change it everywhere, no returning is needed.
+    (exept when direct references to parts of the State are held. Which happen too often at the moment)
     Reassing the struct will not change it and should not be done/needed.
 
     Parameters

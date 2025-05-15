@@ -4,7 +4,8 @@ import os
 import pandas as pd
 
 from consts import *
-from state import Data
+from location import getChildren, parseLocations, serializeLocations
+from state import DBInfo, Data, Location, State
 
 
 def saveToExel(data: Data, filePath: str):
@@ -16,9 +17,23 @@ def saveToExel(data: Data, filePath: str):
     data : The data to be saved
     filePath : The path to the file
     """
-    with pd.ExcelWriter(filePath, engine='openpyxl') as writer:
+    with pd.ExcelWriter(filePath, engine="openpyxl") as writer:
         # to_excel is not properly typed
-        data.df.to_excel(writer, index=False) # type: ignore
+        serializeDBInfo(data.info).to_excel(writer, sheet_name=INFO_SHEET, index=False)  # type: ignore
+        data.df.to_excel(writer, sheet_name=DATA_SHEET, index=False)  # type: ignore
+        serializeLocations(data.locations).to_excel(writer, sheet_name=LOCATION_SHEET, index=False)  # type: ignore
+
+
+def serializeDBInfo(info: DBInfo) -> pd.DataFrame:
+    """
+    Serializes the DBInfo object to a pandas DataFrame.
+    """
+    return pd.DataFrame(
+        [
+            [INFO_VERSION_KEY, info.version],
+        ],
+        columns=[INFO_KEY_COLUMN, INFO_VALUE_COLUMN],
+    )
 
 
 def reloadFromFile(data: Data, filePath: str):
@@ -38,10 +53,10 @@ def reloadFromFile(data: Data, filePath: str):
     filePath : The path of the file
     """
     newData = newDataFromExel(filePath)
-    changeDataTo(data, newData)
+    __changeDataTo(data, newData, False)
 
 
-def changeDataTo(data: Data, to: Data):
+def __changeDataTo(data: Data, to: Data, changeScannedIDs: bool = True):
     """
     Updates references inside the data struct to the new data.
     This means that the reference to the data struct is still valide, enabling seamless reloading of the data.
@@ -53,12 +68,18 @@ def changeDataTo(data: Data, to: Data):
     data : The data struct to be updated
     to : The data struct containing the new contents
     """
-
-    data.scannedIDs = to.scannedIDs
-    data.anzahlScannedItems = to.anzahlScannedItems
+    if changeScannedIDs:
+        data.scannedIDs = to.scannedIDs
+        data.anzahlScannedItems = to.anzahlScannedItems
     data.df = to.df
     data.tableHeaders = to.tableHeaders
     data.dataHeaders = to.dataHeaders
+    for toLoc in to.locations:
+        for dataLoc in data.locations:
+            if toLoc.id == dataLoc.id:
+                toLoc.expanded = dataLoc.expanded
+                break
+    data.locations = to.locations
 
 
 @dataclass
@@ -80,6 +101,7 @@ class Row:
         Can only be read, do not modify.
     scanCount : The amount of times the row was scanned
     """
+
     values: list[int | str]
     _dataHeaders: list[str]
     scanCount: int
@@ -91,12 +113,14 @@ class Row:
     def setValue(self, header: str, value: int | str):
         if header == ID_COLUMN:
             self.values[headerIndex(self.dataHeaders, header)] = int(value)
-        else:    
-            self.values[headerIndex(self.dataHeaders, header)] = "" if value == "nan" else str(value)
+        else:
+            self.values[headerIndex(self.dataHeaders, header)] = (
+                "" if value == "nan" else str(value)
+            )
 
     def getValue(self, header: str) -> str:
         """
-        Returns the value in the columns with the header in the row. 
+        Returns the value in the columns with the header in the row.
         Return an empty string if the value was not present.
 
         :param header: The header of the column
@@ -115,13 +139,14 @@ class Row:
     def empty(self):
         return len(self.values) == 0
 
-    def write(self, data: Data):
+    def write(self, data: Data, path: str):
         """
         Writes the values to the database and updates the scannedIDs and anzahlScannedItems dicts.
 
         :param data: The data struct that holds the dataframe and the scannedIDs and anzahlScannedItems dicts
         """
         self.writeNoValues(data)
+        reloadFromFile(data, path)
         dfRow: pd.DataFrame = data.df.loc[data.df[ID_COLUMN] == self.id()]
         if dfRow.empty:
             data.df = pd.concat(
@@ -130,6 +155,7 @@ class Row:
             )
         else:
             data.df.loc[data.df[ID_COLUMN] == self.id()] = self.values
+        saveToExel(data, path)
 
     def writeNoValues(self, data: Data):
         """
@@ -152,12 +178,13 @@ class Row:
         This is based on the scanCount. Read the documentation of the ``Row`` class for more information.
         """
         return self.scanCount > 0
-    
-   
-    def delete(self, data: Data) -> bool:
-        """Deletes the entry from the database.
+
+    def delete(self, data: Data, path: str) -> bool:
+        """
+        Deletes the entry from the database.
         Returns true if the entry was deleted from the database successfully, otherwise false.
         """
+        reloadFromFile(data, path)
         try:
             # Remove the row from the DataFrame
             data.df = data.df[data.df[ID_COLUMN] != self.id()]
@@ -176,6 +203,7 @@ class Row:
 def clearScanned(data: Data):
     data.scannedIDs.clear()
 
+
 def newDataFromExel(filePath: str) -> Data:
     """
     Creates a new Data struct from the given excel file.
@@ -184,18 +212,32 @@ def newDataFromExel(filePath: str) -> Data:
     # read_excel is not properly typed
     if not os.path.exists(filePath):
         raise ValueError("Datei wurde nicht gefunden.")
-    try: 
-        df: pd.DataFrame = pd.read_excel(filePath, dtype={ID_COLUMN: int, CODE_COLUMN: str, "Bestellnummer": str, STORED_AMOUNT_COLUMN: int}) # type: ignore
+    try:
+        infoSheet: pd.DataFrame = pd.read_excel(filePath, sheet_name=INFO_SHEET, dtype={INFO_KEY_COLUMN: str, INFO_VALUE_COLUMN: str})  # type: ignore
+    except Exception:
+        raise ValueError("Diese Datenbank/Excel hat keine Version (altes Format)")
+    info = parseDBInfo(infoSheet)
+    if info.version != REQUIRED_DB_VERSION:
+        raise ValueError(
+            f"Diese Datenbank/Excel hat die falsche Version. Benötigte Version: {REQUIRED_DB_VERSION}. Vorhandene Version: {info.version}."
+        )
+
+    try:
+        df: pd.DataFrame = pd.read_excel(filePath, sheet_name=DATA_SHEET, dtype={ID_COLUMN: int, CODE_COLUMN: str, "Bestellnummer": str, STORED_AMOUNT_COLUMN: int})  # type: ignore
+        locationSheet: pd.DataFrame = pd.read_excel(filePath, sheet_name=LOCATION_SHEET, dtype={LOCATION_ID_COLUMN: str, LOCATION_NAME_COLUMN: str, LOCATION_PARENT_COLUMN: str})  # type: ignore
     except Exception:
         raise ValueError("Datei konnte nicht gelesen werden.")
+    # Add and remove the columns that shoud be displayed in the table
+    locations = parseLocations(locationSheet)
     data = Data(
         tableHeaders=list(df.columns),
         dataHeaders=list(df.columns),
         scannedIDs=[],
         anzahlScannedItems={},
         df=df,
+        locations=locations,
+        info=info,
     )
-    # Add and remove the columns that shoud be displayed in the table
     if not validateColumns(data):
         raise ValueError("Die Spalten in der Excel-Datei sind ungültig.")
     data.tableHeaders.remove(ID_COLUMN)
@@ -203,6 +245,14 @@ def newDataFromExel(filePath: str) -> Data:
     data.tableHeaders.append(DELETE_COLUMN)
     data.tableHeaders.append(COUNT_COLUMN)
     return data
+
+
+def parseDBInfo(infoSheet: pd.DataFrame) -> DBInfo:
+    version = infoSheet.loc[
+        infoSheet[INFO_KEY_COLUMN] == INFO_VERSION_KEY, INFO_VALUE_COLUMN
+    ].values[0]
+    return DBInfo(version)
+
 
 def validateColumns(data: Data):
     """
@@ -251,9 +301,9 @@ def newRow(data: Data, id: int) -> Row:
     if id not in data.df[ID_COLUMN].to_list():
         raise ValueError(f"ID {id} not found in data")
     return Row(
-        list(data.df.loc[data.df[ID_COLUMN] == id].values[0]), # type: ignore
+        list(data.df.loc[data.df[ID_COLUMN] == id].values[0]),  # type: ignore
         data.dataHeaders,
-        data.scanCount(id), # type: ignore
+        data.scanCount(id),  # type: ignore
     )
 
 
@@ -267,11 +317,13 @@ def newRowFromCode(data: Data, code: str) -> Row:
         return Row([], data.dataHeaders, 0)
     return newRow(data, id.values[0])
 
+
 def validateIDs(data: Data):
     for id in data.scannedIDs:
         if id not in data.df[ID_COLUMN].to_list():
             data.scannedIDs.remove(id)
             data.anzahlScannedItems.pop(id)
+
 
 def syncIdsWithCount(data: Data):
     # Initialize all IDs in the scannedIDs list with a count of 0 that are not in scannedIDs
@@ -285,8 +337,10 @@ def syncIdsWithCount(data: Data):
         if keys[i] not in data.scannedIDs:
             data.anzahlScannedItems.pop(keys[i])
 
+
 def newDfWithScannedIDs(data: Data) -> pd.DataFrame:
-    return data.df[data.df[ID_COLUMN].isin(data.scannedIDs)] # type: ignore
+    return data.df[data.df[ID_COLUMN].isin(data.scannedIDs)]  # type: ignore
+
 
 from typing import List, TypeVar
 
@@ -308,5 +362,34 @@ def getSearchableStrings(data: Data) -> list[str]:
         if type == "" and dec == "" and ident == "":
             continue
         s = f"{id}: {type}, {dec}, {ident}"
-        strings.append(s) # type: ignore
+        strings.append(s)  # type: ignore
     return strings
+
+
+def addLocation(state: State, location: Location):
+    reloadFromFile(state.data, state.settings.filePath)
+    state.data.locations.append(location)
+    saveToExel(state.data, state.settings.filePath)
+
+
+def removeLocation(state: State, location: Location):
+    reloadFromFile(state.data, state.settings.filePath)
+    [
+        removeLocation(state, child)
+        for child in getChildren(state.data.locations, location)
+    ]
+    state.data.locations.remove(location)
+    saveToExel(state.data, state.settings.filePath)
+
+
+def removeLocationById(state: State, id: str):
+    reloadFromFile(state.data, state.settings.filePath)
+    [removeLocation(state, child) for child in getChildren(state.data.locations, id)]
+    state.data.locations = [loc for loc in state.data.locations if loc.id != id]
+    saveToExel(state.data, state.settings.filePath)
+
+
+def renameLocation(state: State, location: Location, newName: str):
+    reloadFromFile(state.data, state.settings.filePath)
+    location.name = newName
+    saveToExel(state.data, state.settings.filePath)

@@ -13,49 +13,37 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
-from consts import SETTINGS_FILE_PATH, CONFIG_FILE_PATH
+from consts import SETTINGS_FILE_PATH
 import db
 import os
-from location import settingsToDict, storageToDict, tryDictToLocations
 from locationWidget import createLocationEditor
 from state import *
 import json
 import copy
 
+def settingsToDict(settings: Settings) -> dict[str, Any]:
+    return {
+        "filePath": settings.filePath,
+        "language": settings.language,
+        "persistScannedIDs": settings.persistScannedIDs,
+        "unitSystem": settings.unitSystem,
+    }
 
-def saveConfigs(settings: Settings):
+def writeSettings(settings: Settings):
     try:
         with open(SETTINGS_FILE_PATH, "w") as f:
             settingsDict = settingsToDict(settings)
             json.dump(settingsDict, f, indent=4)
-        with open(CONFIG_FILE_PATH, "w") as f:
-            configDict: dict[str, Any] = {}
-            configDict["locations"] = storageToDict(settings.locations)
-            json.dump(configDict, f, indent=4)
     except Exception as e:
-        print(f"Error saving configs: {e}")
+        print(f"Error saving settings: {e}")
 
 
-def readConfigs():
+def readSettings():
     # Default values
-    locations: list[Location] = []
     filePath = "Logistic_DB.xlsx"
     language = "German"
     unitSystem = "Imperial"
     persistScannedIDs = True
-
-    # Config File
-    try:
-        with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
-            configDict = json.load(f)
-            locations = tryDictToLocations(configDict["locations"])
-    except Exception as e:
-        print(f"Error reading config file: {e}")
-        QMessageBox.information(
-            mainWindow(),
-            "Fehler",
-            f"Konfigurationsdatei nicht gefunden.\\nEine leere Konfigurationsdatei (ohne Lagerorte) wurde erstellt.\\n\\nWenn es schon eine Konfigurationsdatei gibt, ersetze die leere im Programmordner während das Programm geschlossen ist.\\n\\nPfad: {os.path.abspath(CONFIG_FILE_PATH)}",
-        )
 
     # Settings File
     try:
@@ -69,11 +57,10 @@ def readConfigs():
         print(f"Error reading settings file: {e}")
 
     config = Settings(
-        filePath=filePath,
         language=language,
         unitSystem=unitSystem,
         persistScannedIDs=persistScannedIDs,
-        locations=locations,
+        filePath=filePath
     )
     return config
 
@@ -201,7 +188,7 @@ def createSettings(state: State, closeSettings: Callable[[], None]):
     storageLocations.setStyleSheet("font-weight: bold; font-size: 20px")
     settingsLayout.addWidget(storageLocations)
 
-    locationWidget = createLocationEditor(tempSettings)
+    locationWidget = createLocationEditor(state)
     settingsLayout.addWidget(locationWidget)
 
     settingsLayout.addItem(
@@ -226,16 +213,15 @@ def createSettings(state: State, closeSettings: Callable[[], None]):
         tempSettings.language = languageCombo.currentText()
 
         # Check if the file path exists
-        if os.path.exists(filePathDisplay.text()):
-            tempSettings.filePath = filePathDisplay.text()
-        else:
+        if not os.path.exists(filePathDisplay.text()):
             filePathDisplay.setStyleSheet("QLineEdit { border: 2px solid red; }")
             QMessageBox.information(settingsWidget, "Error", "Datei existiert nicht.")
             return
+        filePath = filePathDisplay.text()
 
         # Reload data from the file and save the configuration
         try:
-            db.reloadFromFile(state.data, tempSettings.filePath)
+            db.reloadFromFile(state.data, filePath)
         except Exception:
             filePathDisplay.setStyleSheet("QLineEdit { border: 2px solid red; }")
             QMessageBox.information(
@@ -248,7 +234,7 @@ def createSettings(state: State, closeSettings: Callable[[], None]):
 
         # Save the updated settings
         state.settings = tempSettings
-        saveConfigs(state.settings)
+        writeSettings(state.settings)
         print("Settings saved successfully.")
         QMessageBox.information(
             mainWindow(), "Erfolg", "Einstellungen erfolgreich gespeichert!"

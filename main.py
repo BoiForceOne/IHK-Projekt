@@ -18,7 +18,7 @@ def main():
     w.setWindowIcon(QIcon("assets/logo.png"))
     setWindow(w)
 
-    settings: Settings = readConfigs()
+    settings: Settings = readSettings()
     
 
     # Entry Point
@@ -35,8 +35,7 @@ def main():
     w.showMaximized()
     app.exec()
 
-    saveConfigs(state.settings)
-    db.saveToExel(state.data, settings.filePath)
+    writeSettings(state.settings)
     if settings.persistScannedIDs:
         db.saveScannedIDs(state.data, SCANNED_IDS_FILE_PATH)
 

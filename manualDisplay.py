@@ -4,7 +4,7 @@ from typing import Callable
 from state import *
 
 def createManualView(state: State, closeManual: Callable[[], None]):
-    manual_file = open("manual.md", "r", encoding='utf-8')
+    manual_file = open("assets/manual.md", "r", encoding='utf-8')
     manual_content = manual_file.read()
     manual_file.close()
 

@@ -106,6 +106,11 @@ def showSettings(state: State):
         createSettings(state, lambda: showScannView(state))
     )
 
+def reloadData(state: State):
+    assert state.gui is not None
+    db.reloadFromFile(state.data, state.settings.filePath)
+    updateTable(state, state.gui.table)
+
 
 def showScannView(state: State):
     assert state.gui is not None
@@ -162,7 +167,7 @@ def updateTable(state: State, table: QTableWidget):
                 item = QTableWidgetItem()
                 item.setText(
                     getLocationString(
-                        state.settings.locations,
+                        state.data.locations,
                         dataRow.getValue(LOCATION_COLUMN),
                     )
                 )
@@ -453,6 +458,14 @@ def createMenuBar(state: State):
     settingsButton.clicked.connect(lambda: showSettings(state))
 
     menuLayout.addWidget(settingsButton)
+
+    # Button for opening the settings menu
+    reloadButton = QPushButton("↻")
+    reloadButton.setFixedSize(30, 30)
+    reloadButton.setToolTip("Lade die aktuelle Excel Datei neu.")
+    reloadButton.clicked.connect(lambda: reloadData(state))
+
+    menuLayout.addWidget(reloadButton)
 
     menuSpacer = QSpacerItem(
         10, 10, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
