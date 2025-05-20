@@ -244,6 +244,10 @@ def newDataFromExel(filePath: str) -> Data:
     data.tableHeaders.append(EDIT_COLUMN)
     data.tableHeaders.append(DELETE_COLUMN)
     data.tableHeaders.append(COUNT_COLUMN)
+    data.tableHeaders = list(df.columns)
+    data.tableHeaders += [EDIT_COLUMN, DELETE_COLUMN, COUNT_COLUMN]
+    
+    return data
     return data
 
 

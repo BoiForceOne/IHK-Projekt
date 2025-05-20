@@ -228,7 +228,7 @@ class State:
     gui: GUI | None
     settings: Settings
     multiplier: int
-    delMode: bool
+    current_mode: str | None = None
 
     def setMultiplier(self, value: int):
         self.multiplier = value

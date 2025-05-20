@@ -1,6 +1,60 @@
 import sys
 import segno
 
+def generate_multiplier_qr(output_dir="multiplier_qrcodes"):
+    multipliers = {
+        "mult1": "01-mult1x.png",
+        "mult10": "02-mult10x.png",
+        "mult100": "03-mult100x.png"
+    }
+    
+    # Create output directory if needed
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for code, filename in multipliers.items():
+        qr = segno.make(code, micro=False)
+        full_path = os.path.join(output_dir, filename)
+        qr.save(
+            full_path,
+            scale=10,
+            border=2,
+            label=f"Multiplier x{code[4:]}",
+            label_font="Arial",
+            label_font_size=12,
+            dark= "black",
+            light="white"
+        )
+    print(f"Generated multiplier QR codes in {output_dir}")
+
+def generate_mode_qr(output_dir="mode_qrcodes"):
+    """Generate all mode QR codes"""
+    modes = {
+        "addmode": "00-addmode.png",
+        "removemode": "01-removemode.png",
+        "exitmode": "02-exitmode.png"
+    }
+    
+    # Create output directory if needed
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for mode, filename in modes.items():
+        qr = segno.make(mode, micro=False)
+        full_path = os.path.join(output_dir, filename)
+        qr.save(
+            full_path,
+            scale=10,
+            border=2,
+            light="white",
+            dark="black",
+            data_dark="black",
+            data_light="white",
+            # Add text label
+            label=f"{mode}\n(Logistic.01 Mode)",
+            label_font="Arial",
+            label_font_size=12
+        )
+    print(f"Generated mode QR codes in {output_dir}")
+
 def generate_data_matrix(data: str):
     """
     Generates a Data Matrix code

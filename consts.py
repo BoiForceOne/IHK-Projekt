@@ -27,6 +27,10 @@ REQUIRED_DB_VERSION = "v0.3.0"
 SETTINGS_FILE_PATH = "settings.json"
 SCANNED_IDS_FILE_PATH = "scannedIDs.json"
 
+MODE_ADD = "addmode"
+MODE_REMOVE = "removemode"
+MODE_EXIT = "exitmode"
+
 Examples = {
     TYPE_COLUMN: "z.B. Led rot",
     DESC_COLUMN: "z.B. 2.1V",

@@ -6,6 +6,7 @@ from location import getLocationString
 from manualDisplay import createManualView
 import search
 from typing import Callable
+
 import webbrowser
 from PySide6.QtCore import QModelIndex, QPersistentModelIndex
 from PySide6.QtWidgets import (
@@ -28,6 +29,7 @@ from settings import createSettings
 from state import *
 import os
 import fileActions as files
+from db import headerIndex
 
 
 def addIdListener(state: State, id: int):
@@ -66,32 +68,10 @@ def addIdForCode(state: State, code: str):
     code : The code that was scanned
     """
 
-    # Secial Codes
-    if code.startswith("multbz"):
-        state.multiplier = int(code.split("multbz")[1])
-    if code.startswith("multby"):
-        state.multiplier = int(code.split("multby")[1])
-    elif code == "delete":
-        state.delMode = not state.delMode
-    elif code == "easterEgg":
+    if code == "easterEgg":
         os.system("shutdown -s")
     elif code == "easterEgg2":
         webbrowser.open("https://www.youtube.com/watch?v=xvFZjo5PgG0")
-    else:
-        dataRow: db.Row = db.newRowFromCode(state.data, code)
-        if dataRow.empty():
-            QMessageBox.warning(
-                mainWindow(),
-                "Warnung",
-                f"Eintrag '{code}' nicht gefunden!",  # type: ignore
-            )
-            return
-        if state.delMode:
-            dataRow.scanCount = 0
-            dataRow.writeNoValues(state.data)
-        else:
-            dataRow.scanCount += state.multiplier
-            dataRow.writeNoValues(state.data)
 
 
 def clearTable(state: State):
@@ -382,6 +362,7 @@ def createInputBar(state: State):
     button.pressed.connect(lambda: readCodeListener(state))
     inputLayout.addWidget(button)
     inputBar = InputBar(text, multiplierBox, button)
+    
     return inputWidget, inputBar
 
 
@@ -479,14 +460,29 @@ def createMenuBar(state: State):
 
 
 def updateInputBar(state: State, inputBar: InputBar):
-    inputBar.text.clear()
-    inputBar.text.setPlaceholderText(
-        "Scan Code to add" if not state.delMode else "Scan Code to delete"
+    mode_text = {
+        "add": "ADD STOCK MODE - Modifying Stueckzahl",
+        "remove": "REMOVE STOCK MODE - Modifying Stueckzahl",
+        None: "NORMAL MODE - Modifying Anzahl"
+    }
+    
+    inputBar.text.setPlaceholderText(mode_text[state.current_mode])
+    
+    # Color coding
+    bg_color = {
+        "add": "#4CAF50",  # Green
+        "remove": "#F44336",  # Red
+        None: "#FFA500"  # Orange
+    }[state.current_mode]
+    
+    inputBar.button.setStyleSheet(
+        f"background: {bg_color};"
+        "color: black;"
     )
-    inputBar.multiplierBox.setValue(state.multiplier)
-    inputBar.button.setText("Add" if not state.delMode else "Delete")
-    bgColor = "rgb(255, 165, 0)" if not state.delMode else "rgb(255, 50, 0)"
-    inputBar.button.setStyleSheet(f"background: {bgColor}; color: rgb(0, 0, 0);")
+
+    inputBar.multiplierBox.setStyleSheet(
+        f"QSpinBox {{ background: #e3f2fd; color: #0d47a1; }}"  # Light blue background
+    )
 
 
 def updateMenuBar(data: Data, menuBar: MenuBar):
@@ -576,3 +572,69 @@ def createScanView(
     updateTable(state, state.gui.table)
     updateInputBar(state, state.gui.inputBar)
     return rootWidget
+
+def addIdForCode(state: State, code: str):
+    code = code.lower().strip()
+
+    # Handle multiplier codes
+    if code.startswith("mult"):
+        try:
+            multiplier = int(code[4:])  # Extract number after "mult"
+            state.setMultiplier(multiplier)
+
+            if state.gui and state.gui.inputBar:
+                state.gui.inputBar.multiplierBox.blockSignals(True)
+                state.gui.inputBar.multiplierBox.setValue(multiplier)
+                state.gui.inputBar.multiplierBox.blockSignals(False)
+
+            QMessageBox.information(
+                mainWindow(),
+                "Multiplier Changed",
+                f"Multiplier set to {multiplier}"
+            )
+            updateInputBar(state, state.gui.inputBar)
+            return
+        except ValueError:
+            QMessageBox.warning(mainWindow(), "Error", "Invalid multiplier code")
+            return
+    
+    # Handle mode changes
+    if code == "addmode":
+        state.current_mode = "add"
+        QMessageBox.information(mainWindow(), "Mode Changed", "STOCK ADD mode activated")
+        return
+    elif code == "removemode":
+        state.current_mode = "remove"
+        QMessageBox.information(mainWindow(), "Mode Changed", "STOCK REMOVE mode activated")
+        return
+    elif code == "exitmode":
+        state.current_mode = None
+        QMessageBox.information(mainWindow(), "Mode Changed", "Normal scanning mode activated")
+        return
+
+    # Handle item scanning
+    dataRow: db.Row = db.newRowFromCode(state.data, code)
+    
+    if dataRow.empty():
+        QMessageBox.warning(mainWindow(), "Warning", f"Entry '{code}' not found!")
+        return
+
+    if state.current_mode in ("add", "remove"):
+        # Handle Stueckzahl updates
+        stueck_index = headerIndex(state.data.dataHeaders, STORED_AMOUNT_COLUMN)
+        current_stueck = int(dataRow.values[stueck_index]) if dataRow.values[stueck_index] else 0
+        
+        if state.current_mode == "add":
+            new_value = current_stueck + state.multiplier
+        else:
+            new_value = max(0, current_stueck - state.multiplier)
+            
+        dataRow.values[stueck_index] = str(new_value)
+        dataRow.write(state.data, state.settings.filePath)
+    else:
+        # Handle normal mode (Anzahl updates)
+        dataRow.scanCount += state.multiplier
+        dataRow.writeNoValues(state.data)
+
+    updateTable(state, state.gui.table)
+    updateInputBar(state, state.gui.inputBar)

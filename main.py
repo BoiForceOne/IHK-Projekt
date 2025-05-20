@@ -27,7 +27,12 @@ def main():
         db.loadIDsAndCount(data, SCANNED_IDS_FILE_PATH)
         db.validateIDs(data)
 
-    state = State(data, None, settings, multiplier=1, delMode=False)
+    state = State(
+        data=data, 
+        gui=None, 
+        settings=settings, 
+        multiplier=1
+)
 
     rootWidget = createScanView(state, app, w)
     w.setCentralWidget(rootWidget)
