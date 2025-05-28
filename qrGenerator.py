@@ -4,9 +4,9 @@ import os
 
 def generate_multiplier_qr(output_dir="multiplier_qrcodes"):
     multipliers = {
-        "mult1": "01-mult1x.png",
-        "mult10": "02-mult10x.png",
-        "mult100": "03-mult100x.png"
+        "mult1": "mult1.png",
+        "mult10": "mult10.png",
+        "mult100": "mult100.png"
     }
     
     # Create output directory if needed

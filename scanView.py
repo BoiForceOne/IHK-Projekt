@@ -8,7 +8,7 @@ import search
 from typing import Callable
 
 import webbrowser
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex
+from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QTimer
 from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
@@ -45,6 +45,8 @@ def readCodeListener(state: State):
     updateInputBar(state, state.gui.inputBar)
     updateMenuBar(state.data, state.gui.menuBar)
     updateTable(state, state.gui.table)
+    state.gui.inputBar.text.clear()  # Eingabezeile leeren
+    state.gui.inputBar.text.setFocus() #Fockus auf die Eingabezeile setzen
 
 
 def clearTable(state: State):
@@ -436,7 +438,7 @@ def updateInputBar(state: State, inputBar: InputBar):
     mode_text = {
         "add": "Auffüllen Modus",
         "remove": "Entnehmen Modus",
-        None: "Nachkaufen Modus"
+        None: "Nachbestellen Modus"
     }
     
     inputBar.text.setPlaceholderText(mode_text[state.current_mode])
@@ -538,14 +540,13 @@ def createScanView(
     inputWidget, inputBar = createInputBar(state)
     rootLayout.addWidget(inputWidget)
 
-    inputBar.text.setFocus()
-
     state.gui = GUI(app, window, table, inputBar, menuBar)
 
     # Setting the initial state
     updateMenuBar(state.data, state.gui.menuBar)
     updateTable(state, state.gui.table)
     updateInputBar(state, state.gui.inputBar)
+    QTimer.singleShot(0, state.gui.inputBar.text.setFocus)
     return rootWidget
 
 def addIdForCode(state: State, code: str):
