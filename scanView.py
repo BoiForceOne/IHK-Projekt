@@ -47,33 +47,6 @@ def readCodeListener(state: State):
     updateTable(state, state.gui.table)
 
 
-def addIdForCode(state: State, code: str):
-    """
-    Gets the id associated with the code and adds it to the list of scanned IDs.
-    Additionally, it handles special codes.
-
-    To show the new entry in the table, call ``main.updateTable()``
-
-    Special Codes
-    -------------
-    - ``multby[number]``: Set the multiplier to *[number]*
-    - ``multbz[number]``: Set the multiplier to *[number]* (because of a typo when creating the QR-Code)
-    - ``delete``: Toggles delete mode -> Scanned Codes are removed from the list of scanned IDs.
-    - everything not matching a special code is treated as a normal code
-
-    Parameters
-    ----------
-    state : State of the application
-        Example ``multbz10``
-    code : The code that was scanned
-    """
-
-    if code == "easterEgg":
-        os.system("shutdown -s")
-    elif code == "easterEgg2":
-        webbrowser.open("https://www.youtube.com/watch?v=xvFZjo5PgG0")
-
-
 def clearTable(state: State):
     assert state.gui is not None
     db.clearScanned(state.data)
@@ -461,9 +434,9 @@ def createMenuBar(state: State):
 
 def updateInputBar(state: State, inputBar: InputBar):
     mode_text = {
-        "add": "ADD STOCK MODE - Modifying Stueckzahl",
-        "remove": "REMOVE STOCK MODE - Modifying Stueckzahl",
-        None: "NORMAL MODE - Modifying Anzahl"
+        "add": "Auffüllen Modus",
+        "remove": "Entnehmen Modus",
+        None: "Nachkaufen Modus"
     }
     
     inputBar.text.setPlaceholderText(mode_text[state.current_mode])
@@ -481,8 +454,10 @@ def updateInputBar(state: State, inputBar: InputBar):
     )
 
     inputBar.multiplierBox.setStyleSheet(
-        f"QSpinBox {{ background: #e3f2fd; color: #0d47a1; }}"  # Light blue background
+        f"QSpinBox {{ background: white; color: black; }}" 
     )
+
+    inputBar.multiplierBox.setValue(state.multiplier)
 
 
 def updateMenuBar(data: Data, menuBar: MenuBar):
@@ -580,43 +555,34 @@ def addIdForCode(state: State, code: str):
     if code.startswith("mult"):
         try:
             multiplier = int(code[4:])  # Extract number after "mult"
-            state.setMultiplier(multiplier)
+            state.multiplier = multiplier
 
-            if state.gui and state.gui.inputBar:
-                state.gui.inputBar.multiplierBox.blockSignals(True)
-                state.gui.inputBar.multiplierBox.setValue(multiplier)
-                state.gui.inputBar.multiplierBox.blockSignals(False)
-
-            QMessageBox.information(
-                mainWindow(),
-                "Multiplier Changed",
-                f"Multiplier set to {multiplier}"
-            )
+#            QMessageBox.information(mainWindow(), "Multiplikator Geändert", f"Multiplikator gesetzt auf {multiplier}")
             updateInputBar(state, state.gui.inputBar)
             return
         except ValueError:
-            QMessageBox.warning(mainWindow(), "Error", "Invalid multiplier code")
+            QMessageBox.warning(mainWindow(), "Warnung", "Ungültiger Multiplikator!")
             return
     
-    # Handle mode changes
+    # Handle mode codes
     if code == "addmode":
         state.current_mode = "add"
-        QMessageBox.information(mainWindow(), "Mode Changed", "STOCK ADD mode activated")
+#        QMessageBox.information(mainWindow(), "Modus Geändert", "Auffüllen Modus aktiviert")
         return
     elif code == "removemode":
         state.current_mode = "remove"
-        QMessageBox.information(mainWindow(), "Mode Changed", "STOCK REMOVE mode activated")
+#        QMessageBox.information(mainWindow(), "Modus Geändert", "Entnehmen Modus aktiviert")
         return
     elif code == "exitmode":
         state.current_mode = None
-        QMessageBox.information(mainWindow(), "Mode Changed", "Normal scanning mode activated")
+#        QMessageBox.information(mainWindow(), "Modus Geändert", "Nachkaufen Modus aktiviert")
         return
 
-    # Handle item scanning
+    # Handle item codes
     dataRow: db.Row = db.newRowFromCode(state.data, code)
     
     if dataRow.empty():
-        QMessageBox.warning(mainWindow(), "Warning", f"Entry '{code}' not found!")
+        QMessageBox.warning(mainWindow(), "Warnung", f"Eintrag '{code}' existiert nicht!")
         return
 
     if state.current_mode in ("add", "remove"):
@@ -632,7 +598,7 @@ def addIdForCode(state: State, code: str):
         dataRow.values[stueck_index] = str(new_value)
         dataRow.write(state.data, state.settings.filePath)
     else:
-        # Handle normal mode (Anzahl updates)
+        # Handle Anzahl updates
         dataRow.scanCount += state.multiplier
         dataRow.writeNoValues(state.data)
 

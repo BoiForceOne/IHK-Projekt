@@ -216,19 +216,15 @@ class State:
 
     Parameters
     ----------
-    filePath : The path to the exel file that is currently used
     data : The data that is currently used
-    gui : The gui that is currently used
-        None before the gui is created
+    gui : The gui that is currently used; None before the gui is created
+    settings : The settings that are currently used
     multiplier : The multiplier that is currently used when scanning codes
-    delMode : If the delete mode is active
+    currentmode : If the add, remove mode is active
     """
 
     data: Data
     gui: GUI | None
     settings: Settings
     multiplier: int
-    current_mode: str | None = None
-
-    def setMultiplier(self, value: int):
-        self.multiplier = value
+    current_mode: str | None = "remove"

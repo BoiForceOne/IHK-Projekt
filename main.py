@@ -11,6 +11,7 @@ from scanView import createScanView
 
 
 def main():
+    
     # Application Window
     app = QApplication(sys.argv)
     w = QMainWindow()

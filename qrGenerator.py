@@ -1,5 +1,6 @@
 import sys
 import segno
+import os
 
 def generate_multiplier_qr(output_dir="multiplier_qrcodes"):
     multipliers = {
@@ -18,10 +19,7 @@ def generate_multiplier_qr(output_dir="multiplier_qrcodes"):
             full_path,
             scale=10,
             border=2,
-            label=f"Multiplier x{code[4:]}",
-            label_font="Arial",
-            label_font_size=12,
-            dark= "black",
+            dark="black",
             light="white"
         )
     print(f"Generated multiplier QR codes in {output_dir}")
@@ -29,9 +27,9 @@ def generate_multiplier_qr(output_dir="multiplier_qrcodes"):
 def generate_mode_qr(output_dir="mode_qrcodes"):
     """Generate all mode QR codes"""
     modes = {
-        "addmode": "00-addmode.png",
-        "removemode": "01-removemode.png",
-        "exitmode": "02-exitmode.png"
+        "addmode": "addmode.png",
+        "removemode": "removemode.png",
+        "exitmode": "exitmode.png"
     }
     
     # Create output directory if needed
@@ -46,12 +44,6 @@ def generate_mode_qr(output_dir="mode_qrcodes"):
             border=2,
             light="white",
             dark="black",
-            data_dark="black",
-            data_light="white",
-            # Add text label
-            label=f"{mode}\n(Logistic.01 Mode)",
-            label_font="Arial",
-            label_font_size=12
         )
     print(f"Generated mode QR codes in {output_dir}")
 
@@ -67,7 +59,11 @@ def generate_data_matrix(data: str):
     return data_matrix
 
 if __name__ == "__main__":
-    name = input("Namen des QR-Codes eingeben: ")
+    generate_multiplier_qr()
+    generate_mode_qr()
+
+
+"""    name = input("Namen des QR-Codes eingeben: ")
     match len(sys.argv):
         case 1:
             data = input("Zu entcodenden Text eingeben: ")
@@ -80,3 +76,4 @@ if __name__ == "__main__":
             print(f"QR-Code für '{sys.argv[1]}' gespeichert als {name}")
         case _:
             print("Ungültige Anzahl an Argumenten")
+"""
