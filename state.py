@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 import pandas as pd
+from typing import Union
 
 __window: QMainWindow
 
@@ -111,7 +112,7 @@ class GUI:
 class Location:
     name: str
     id: str
-    parent: str | None
+    parent: Union[str, None]
     expanded: bool = False
 
 
